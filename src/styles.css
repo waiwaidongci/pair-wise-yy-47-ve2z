@@ -55,6 +55,9 @@ body { min-width: 320px; }
 .report-sheet table { width: 100%; margin-top: 18px; border-collapse: collapse; font-size: 12px; }
 .report-sheet th, .report-sheet td { padding: 9px; border: 1px solid #dbe2e5; text-align: left; }
 .report-sheet th { background: #edf3f4; }
+.row-blocked > td { background: #fff7f5 !important; }
+.invalidation-draft-line { display: flex; align-items: flex-start; gap: 6px; margin-top: 6px; padding: 6px 8px; border-left: 3px solid #cf1322; background: #fdf3f1; border-radius: 4px; }
+.invalidation-draft-line .ant-tag { margin: 0; flex-shrink: 0; }
 
 @media (max-width: 760px) {
   .page { padding: 12px; }

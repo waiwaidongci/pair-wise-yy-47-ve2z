@@ -5,21 +5,30 @@ import {
   AppstoreOutlined,
   AuditOutlined,
   BarsOutlined,
+  CloudSyncOutlined,
   DiffOutlined,
   FileDoneOutlined,
   MenuOutlined,
 } from '@ant-design/icons'
+import { useWorkspaceStore } from '../store/useWorkspaceStore'
+import { countBlocked, countPending } from '../api/merge'
 
 const items = [
   { key: '/', icon: <AppstoreOutlined />, label: <NavLink to="/">整改总览</NavLink> },
   { key: '/issues', icon: <BarsOutlined />, label: <NavLink to="/issues">问题台账</NavLink> },
   { key: '/retest', icon: <AuditOutlined />, label: <NavLink to="/retest">复测工作台</NavLink> },
+  { key: '/sync', icon: <CloudSyncOutlined />, label: <NavLink to="/sync">断网合并</NavLink> },
   { key: '/versions', icon: <DiffOutlined />, label: <NavLink to="/versions">版本差异</NavLink> },
   { key: '/report', icon: <FileDoneOutlined />, label: <NavLink to="/report">整改报告</NavLink> },
 ]
 
 export default function AppLayout() {
   const [open, setOpen] = useState(false)
+  const issues = useWorkspaceStore((state) => state.issues)
+  const offlineDirty = useWorkspaceStore((state) => state.offlineDirty)
+  const interrupted = Object.values(useWorkspaceStore((state) => state.progress)).some((item) => item.status === 'interrupted')
+  const pendingTotal = countPending(issues)
+  const blockedTotal = countBlocked(issues)
   const sidebar = (
     <div className="sidebar-inner">
       <div className="brand">
@@ -27,7 +36,11 @@ export default function AppLayout() {
         <div><strong>无障碍整改中心</strong><small>企业数字体验治理</small></div>
       </div>
       <Menu mode="inline" theme="dark" items={items} selectedKeys={[location.pathname]} onClick={() => setOpen(false)} />
-      <div className="sync-card"><Tag color="success">正常</Tag><strong>规则库 2026.09</strong><span>最后同步 16:42</span></div>
+      <div className="sync-card">
+        <Tag color={interrupted ? 'error' : offlineDirty ? 'warning' : 'success'}>{interrupted ? '并入中断' : offlineDirty ? '待确认' : '正常'}</Tag>
+        <strong>规则库 2026.09</strong>
+        <span>待确认 {pendingTotal} · 阻塞 {blockedTotal}</span>
+      </div>
     </div>
   )
 

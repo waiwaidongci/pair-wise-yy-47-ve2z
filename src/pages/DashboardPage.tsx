@@ -3,18 +3,22 @@ import { ArrowRightOutlined, CheckCircleOutlined, ClockCircleOutlined, Exclamati
 import { useNavigate } from 'react-router-dom'
 import { useIssues } from '../api/useIssues'
 import { useWorkspaceStore } from '../store/useWorkspaceStore'
+import { countBlocked, countPending } from '../api/merge'
 
 export default function DashboardPage() {
   useIssues()
   const issues = useWorkspaceStore((state) => state.issues)
   const navigate = useNavigate()
   const open = issues.filter((item) => !['已通过', '不适用'].includes(item.status))
-  const passed = issues.filter((item) => item.status === '已通过').length
-  const critical = issues.filter((item) => item.impact === '致命' || item.impact === '严重').length
-  const coverage = Math.round((passed / issues.length) * 100)
+  // 证据更新导致旧已通过失效的问题回到待复测，不计入通过口径
+  const effectivelyPassed = issues.filter((item) => item.status === '已通过' && !item.invalidations.some((inv) => inv.active))
+  const passed = effectivelyPassed.length
+  const coverage = issues.length ? Math.round((passed / issues.length) * 100) : 0
+  const pendingTotal = countPending(issues)
+  const blockedTotal = countBlocked(issues)
   const bySite = Array.from(new Set(issues.map((item) => item.site))).map((site) => {
     const items = issues.filter((issue) => issue.site === site)
-    return { site, total: items.length, passed: items.filter((item) => item.status === '已通过').length }
+    return { site, total: items.length, passed: items.filter((item) => item.status === '已通过' && !item.invalidations.some((inv) => inv.active)).length, blocked: items.filter((item) => item.invalidations.some((inv) => inv.active) || item.retestRecords.some((record) => record.confirmation === '待确认')).length }
   })
 
   return (
@@ -33,10 +37,20 @@ export default function DashboardPage() {
 
       <div className="metric-grid">
         <div className="metric-card"><span>开放问题</span><strong>{open.length}</strong><small>{issues.length} 条总记录</small></div>
-        <div className="metric-card"><span>严重 / 致命</span><strong style={{ color: '#b84f32' }}>{critical}</strong><small>需优先排期</small></div>
-        <div className="metric-card"><span>复测通过率</span><strong>{coverage}%</strong><small>当前版本口径</small></div>
-        <div className="metric-card"><span>覆盖站点</span><strong>{bySite.length}</strong><small>统一 WCAG 2.2 AA</small></div>
+        <div className="metric-card"><span>待确认复测</span><strong style={{ color: '#d48806' }}>{pendingTotal}</strong><small>断网两页并入，待逐条采纳</small></div>
+        <div className="metric-card"><span>复测通过率</span><strong>{coverage}%</strong><small>已扣除证据失效的旧通过</small></div>
+        <div className="metric-card"><span>阻塞项</span><strong style={{ color: '#b84f32' }}>{blockedTotal}</strong><small>待确认或失效待重算</small></div>
       </div>
+
+      {(pendingTotal > 0 || blockedTotal > 0) && (
+        <div className="panel" style={{ marginBottom: 14, padding: '12px 16px' }}>
+          <Space wrap>
+            <ExclamationCircleOutlined style={{ color: '#ba4d31' }} />
+            <Typography.Text strong>有 {blockedTotal} 个问题处于阻塞状态（{pendingTotal} 份复测待确认）</Typography.Text>
+            <Button size="small" type="link" onClick={() => navigate('/sync')}>前往断网合并处理</Button>
+          </Space>
+        </div>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.2fr) minmax(300px,.8fr)', gap: 14 }}>
         <div className="panel">
@@ -46,7 +60,7 @@ export default function DashboardPage() {
               <div key={item.site} style={{ marginBottom: 20 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 7 }}>
                   <Typography.Text strong>{item.site}</Typography.Text>
-                  <Typography.Text type="secondary">{item.passed}/{item.total} 已通过</Typography.Text>
+                  <Typography.Text type="secondary">{item.passed}/{item.total} 已通过{item.blocked > 0 ? ` · ${item.blocked} 阻塞` : ''}</Typography.Text>
                 </div>
                 <Progress percent={Math.round((item.passed / item.total) * 100)} showInfo={false} strokeColor="#257c80" />
               </div>

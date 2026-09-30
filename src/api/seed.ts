@@ -25,6 +25,7 @@ export const seedIssues: Issue[] = [
     dueDate: '2026-10-06',
     mergedKeys: ['A11Y-1052', 'A11Y-1061'],
     retestRecords: [],
+    invalidations: [],
     history: commonHistory('筛选抽屉键盘陷阱'),
   },
   {
@@ -47,7 +48,8 @@ export const seedIssues: Issue[] = [
     mergedKeys: [],
     fixNote: '增加关闭后的 triggerRef.focus 恢复逻辑。',
     retestEnv: 'Chrome 140 / VoiceOver / 商城 v4.18.3',
-    retestRecords: [{ id: 'RT-22', actor: '苏禾', result: '通过', note: '焦点返回触发按钮，顺序正确。', at: '09-28 14:20' }],
+    retestRecords: [{ id: 'RT-22', actor: '苏禾', result: '通过', note: '焦点返回触发按钮，顺序正确。', at: '09-28 14:20', confirmation: '已采纳' }],
+    invalidations: [],
     history: commonHistory('客服弹窗焦点恢复'),
   },
   {
@@ -69,6 +71,7 @@ export const seedIssues: Issue[] = [
     dueDate: '2026-10-10',
     mergedKeys: [],
     retestRecords: [],
+    invalidations: [],
     history: commonHistory('优惠券选择层键盘循环'),
   },
   {
@@ -92,6 +95,7 @@ export const seedIssues: Issue[] = [
     fixNote: '更换色板并增加虚线纹理和可切换数据表。',
     retestEnv: 'Safari 26 / 对比度工具 / admin-v2.7.5',
     retestRecords: [],
+    invalidations: [],
     history: commonHistory('图表颜色对比度'),
   },
   {
@@ -113,7 +117,8 @@ export const seedIssues: Issue[] = [
     dueDate: '2026-10-05',
     mergedKeys: [],
     fixNote: '计划仅增加视觉错误颜色。',
-    retestRecords: [{ id: 'RT-31', actor: '李予', result: '退回', note: '仍需接入 aria-live，并验证字段 aria-describedby。', at: '09-28 11:05' }],
+    retestRecords: [{ id: 'RT-31', actor: '李予', result: '退回', note: '仍需接入 aria-live，并验证字段 aria-describedby。', at: '09-28 11:05', confirmation: '已采纳' }],
+    invalidations: [],
     history: commonHistory('表单错误提示'),
   },
 ]

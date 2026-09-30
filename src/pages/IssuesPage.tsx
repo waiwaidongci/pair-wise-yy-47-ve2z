@@ -19,6 +19,7 @@ import { FilterOutlined, MergeCellsOutlined, SaveOutlined, TeamOutlined } from '
 import { useIssues } from '../api/useIssues'
 import { useWorkspaceStore } from '../store/useWorkspaceStore'
 import type { Issue } from '../api/types'
+import { countBlocked, countPending, isBlocked, pendingRecords } from '../api/merge'
 
 const impactColor: Record<string, string> = { 致命: 'red', 严重: 'volcano', 中等: 'gold', 轻微: 'blue' }
 const statusColor: Record<string, string> = { 待分配: 'default', 修复中: 'processing', 待复测: 'orange', 已通过: 'success', 已退回: 'error', 不适用: 'default' }
@@ -65,6 +66,20 @@ export default function IssuesPage() {
     { title: '优先级', dataIndex: 'priority', width: 76, render: (value) => <Tag>{value}</Tag> },
     { title: '团队 / 负责人', dataIndex: 'team', width: 160, render: (_, record) => <div>{record.team}<br /><Typography.Text type="secondary">{record.owner}</Typography.Text></div> },
     { title: '状态', dataIndex: 'status', width: 95, render: (value) => <Tag color={statusColor[value]}>{value}</Tag> },
+    {
+      title: '待确认 / 阻塞',
+      width: 120,
+      render: (_, record) => {
+        const pending = pendingRecords(record).length
+        return (
+          <Space size={4} wrap>
+            {pending > 0 && <Tag color="orange">{pending} 份待确认</Tag>}
+            {isBlocked(record) && <Tag color="error">阻塞</Tag>}
+            {!isBlocked(record) && <Typography.Text type="secondary" style={{ fontSize: 11 }}>—</Typography.Text>}
+          </Space>
+        )
+      },
+    },
     { title: '截止', dataIndex: 'dueDate', width: 105 },
     { title: '', width: 76, fixed: 'right', render: (_, record) => <Button type="link" onClick={() => setDetail(record)}>详情</Button> },
   ]
@@ -98,6 +113,8 @@ export default function IssuesPage() {
         <Select placeholder="优先级" allowClear style={{ width: 110 }} value={filters.priority || undefined} onChange={(value) => setFilters({ ...filters, priority: value ?? '' })} options={['P0', 'P1', 'P2', 'P3'].map((value) => ({ value }))} />
         <Button icon={<SaveOutlined />} onClick={applyFilter}>保存筛选</Button>
         <span className="spacer" />
+        <Tag color="orange">待确认 {countPending(issues)}</Tag>
+        <Tag color="error">阻塞项 {countBlocked(issues)}</Tag>
         <Typography.Text type="secondary">已选 {selectedKeys.length} 条 · 共 {data.length} 条</Typography.Text>
       </div>
 
@@ -117,7 +134,8 @@ export default function IssuesPage() {
             dataSource={data}
             pagination={{ pageSize: 10, showSizeChanger: true, showTotal: (total) => `共 ${total} 条` }}
             rowSelection={{ selectedRowKeys: selectedKeys, onChange: (keys) => setSelectedKeys(keys as string[]) }}
-            scroll={{ x: 1250 }}
+            rowClassName={(record) => (isBlocked(record) ? 'row-blocked' : '')}
+            scroll={{ x: 1380 }}
           />
         </div>
       </div>
@@ -141,6 +159,32 @@ export default function IssuesPage() {
               <Typography.Title level={5}>操作历史</Typography.Title>
               {detail.history.map((event, index) => <div className="timeline-item" key={index}><Typography.Text strong>{event.action}</Typography.Text><div>{event.detail}</div><Typography.Text type="secondary" style={{ fontSize: 11 }}>{event.actor} · {event.at}</Typography.Text></div>)}
             </div>
+            {detail.invalidations.length > 0 && (
+              <div>
+                <Typography.Title level={5} type="danger">证据更新 / 失效来源</Typography.Title>
+                {detail.invalidations.map((inv) => (
+                  <div className="timeline-item" key={inv.id}>
+                    <Tag color={inv.active ? 'error' : 'default'}>{inv.active ? '已通过失效 · 待重算' : '已重算解除'}</Tag>
+                    <div>{inv.reason}</div>
+                    <div style={{ fontSize: 12 }}><Typography.Text delete type="secondary">{inv.evidenceBefore}</Typography.Text> → <Typography.Link href={inv.evidenceAfter} target="_blank">{inv.evidenceAfter}</Typography.Link></div>
+                    <Typography.Text type="secondary" style={{ fontSize: 11 }}>{inv.sourcePage} · 旧结论 {inv.recordId} · {inv.at}</Typography.Text>
+                  </div>
+                ))}
+              </div>
+            )}
+            {pendingRecords(detail).length > 0 && (
+              <div>
+                <Typography.Title level={5} type="warning">待确认复测（{pendingRecords(detail).length}）</Typography.Title>
+                {pendingRecords(detail).map((record) => (
+                  <div className="timeline-item" key={record.id}>
+                    <Tag color={record.result === '通过' ? 'success' : record.result === '退回' ? 'error' : 'default'}>{record.result}</Tag>
+                    <Tag color="geekblue">{record.sourcePage}</Tag>
+                    <div>{record.note}</div>
+                    <Typography.Text type="secondary" style={{ fontSize: 11 }}>{record.actor} · {record.at} · {record.submissionId}</Typography.Text>
+                  </div>
+                ))}
+              </div>
+            )}
           </Space>
         )}
       </Drawer>
