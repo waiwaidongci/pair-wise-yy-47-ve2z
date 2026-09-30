@@ -1,8 +1,9 @@
-import { useState } from 'react'
-import { Button, Checkbox, Select, Space, Tag, Typography, message } from 'antd'
+import { useMemo, useState } from 'react'
+import { Alert, Button, Checkbox, Select, Space, Tag, Typography, message } from 'antd'
 import { DownloadOutlined, FilePdfOutlined } from '@ant-design/icons'
 import { useIssues } from '../api/useIssues'
 import { useWorkspaceStore } from '../store/useWorkspaceStore'
+import { selectBlockingIssues, selectInvalidatedIssues, selectPendingEntries } from '../api/offlineMerge'
 
 export default function ReportPage() {
   useIssues()
@@ -12,10 +13,28 @@ export default function ReportPage() {
   const [includeHistory, setIncludeHistory] = useState(true)
   const visible = issues.filter((item) => site === '全部站点' || item.site === site)
 
+  const pendingCount = useMemo(() => selectPendingEntries(visible).length, [visible])
+  const blockingCount = useMemo(() => selectBlockingIssues(visible).length, [visible])
+  const invalidated = useMemo(() => selectInvalidatedIssues(visible), [visible])
+
   const exportCsv = () => {
     const rows = [
-      ['编号', '站点', '版本', '问题', 'WCAG', '影响', '状态', '团队', '负责人', '截止日期'],
-      ...visible.map((issue) => [issue.key, issue.site, issue.version, issue.title, issue.wcag.join(' / '), issue.impact, issue.status, issue.team, issue.owner, issue.dueDate]),
+      ['编号', '站点', '版本', '问题', 'WCAG', '影响', '状态', '团队', '负责人', '截止日期', '待确认复测数', '阻塞项', '失效来源'],
+      ...visible.map((issue) => [
+        issue.key,
+        issue.site,
+        issue.version,
+        issue.title,
+        issue.wcag.join(' / '),
+        issue.impact,
+        issue.status,
+        issue.team,
+        issue.owner,
+        issue.dueDate,
+        String(issue.retestRecords.filter((record) => record.pending).length),
+        issue.retestRecords.some((record) => record.pending) ? '是' : '否',
+        issue.invalidatedReason ?? '',
+      ]),
     ]
     const csv = rows.map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(',')).join('\n')
     const url = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' }))
@@ -50,17 +69,45 @@ export default function ReportPage() {
         </Space>
       </div>
 
+      {(pendingCount > 0 || blockingCount > 0 || invalidated.length > 0) && (
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginBottom: 14 }}
+          message="报告草稿存在未决项，结论可能变动"
+          description={
+            <Space wrap>
+              <Tag color="orange">待确认复测 {pendingCount} 条</Tag>
+              <Tag color="red">阻塞项 {blockingCount} 个</Tag>
+              <Tag color="gold">证据失效 {invalidated.length} 项</Tag>
+              <span className="muted">离线并入的复测记录待审核员采纳；证据更新后原通过结论已失效，需按新证据重测。</span>
+            </Space>
+          }
+        />
+      )}
+
       <article className="panel report-sheet">
         <header style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '3px solid #173e4d', paddingBottom: 16 }}>
-          <div><Typography.Text type="secondary">数字体验无障碍治理项目</Typography.Text><h2>网站无障碍整改报告</h2><Typography.Text>生成日期：2026-09-29 · WCAG 2.2 AA</Typography.Text></div>
-          <div style={{ textAlign: 'right' }}><Tag color="blue">{site}</Tag><div>问题 {visible.length} 项</div><div>通过 {visible.filter((item) => item.status === '已通过').length} 项</div></div>
+          <div><Typography.Text type="secondary">数字体验无障碍治理项目</Typography.Text><h2>网站无障碍整改报告</h2><Typography.Text>生成日期：2026-09-30 · WCAG 2.2 AA</Typography.Text></div>
+          <div style={{ textAlign: 'right' }}><Tag color="blue">{site}</Tag><div>问题 {visible.length} 项</div><div>通过 {visible.filter((item) => item.status === '已通过').length} 项</div><div>待确认 {pendingCount} 条 · 阻塞 {blockingCount} 项</div></div>
         </header>
+        {invalidated.length > 0 && (
+          <div style={{ marginTop: 18, padding: 12, border: '1px solid #ffe58f', borderRadius: 8, background: '#fffbe6' }}>
+            <Typography.Title level={5} style={{ marginTop: 0 }}>失效来源（证据更新导致原通过结论失效）</Typography.Title>
+            {invalidated.map((issue) => (
+              <div key={issue.key} style={{ marginBottom: 6 }}>
+                <Tag color="gold">失效</Tag><Typography.Text strong>{issue.key}</Typography.Text> {issue.title}
+                <div className="muted" style={{ fontSize: 12 }}>{issue.invalidatedReason}</div>
+              </div>
+            ))}
+          </div>
+        )}
         <table>
           <thead><tr><th>编号</th><th>页面 / 范围</th><th>问题与 WCAG</th><th>影响</th><th>状态 / 责任</th><th>截止</th></tr></thead>
           <tbody>
             {visible.map((issue) => (
               <tr key={issue.key}>
-                <td>{issue.key}</td>
+                <td>{issue.key}{issue.retestRecords.some((record) => record.pending) && <div><Tag color="orange">待确认 {issue.retestRecords.filter((record) => record.pending).length}</Tag></div>}{issue.invalidatedReason && <div><Tag color="gold">已失效</Tag></div>}</td>
                 <td>{issue.site}<br /><Typography.Text type="secondary">{issue.version}</Typography.Text></td>
                 <td><strong>{issue.title}</strong><br />{issue.wcag.join(' / ')}{includeEvidence && <><br /><Typography.Link href={issue.evidence}>查看证据</Typography.Link></>}</td>
                 <td><Tag color={issue.impact === '致命' ? 'red' : issue.impact === '严重' ? 'volcano' : 'gold'}>{issue.impact}</Tag></td>

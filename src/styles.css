@@ -34,7 +34,7 @@ body { min-width: 320px; }
 .sync-card span { color: #91a7b1; font-size: 10px; }
 .mobile-header { display: none; background: #15313d; }
 
-.metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+.metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 14px; }
 .metric-card { padding: 16px; border: 1px solid #dfe5e8; border-radius: 10px; background: white; }
 .metric-card span, .metric-card small { display: block; color: #728089; font-size: 12px; }
 .metric-card strong { display: block; margin: 7px 0; color: #173b49; font-size: 28px; }

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import axios from 'axios'
 import {
+  Alert,
   Button,
   DatePicker,
   Drawer,
@@ -19,6 +20,7 @@ import { FilterOutlined, MergeCellsOutlined, SaveOutlined, TeamOutlined } from '
 import { useIssues } from '../api/useIssues'
 import { useWorkspaceStore } from '../store/useWorkspaceStore'
 import type { Issue } from '../api/types'
+import { selectPendingEntries } from '../api/offlineMerge'
 
 const impactColor: Record<string, string> = { 致命: 'red', 严重: 'volcano', 中等: 'gold', 轻微: 'blue' }
 const statusColor: Record<string, string> = { 待分配: 'default', 修复中: 'processing', 待复测: 'orange', 已通过: 'success', 已退回: 'error', 不适用: 'default' }
@@ -32,11 +34,23 @@ export default function IssuesPage() {
   const saveFilter = useWorkspaceStore((state) => state.saveFilter)
   const removeFilter = useWorkspaceStore((state) => state.removeFilter)
   const mergeIssues = useWorkspaceStore((state) => state.mergeIssues)
+  const updateEvidence = useWorkspaceStore((state) => state.updateEvidence)
+  const decideRetest = useWorkspaceStore((state) => state.decideRetest)
   const [filters, setFilters] = useState({ query: '', site: '', status: '', priority: '' })
-  const [detail, setDetail] = useState<Issue | null>(null)
+  const [detailKey, setDetailKey] = useState<string | null>(null)
   const [assignOpen, setAssignOpen] = useState(false)
   const [mergeOpen, setMergeOpen] = useState(false)
+  const [evidenceOpen, setEvidenceOpen] = useState(false)
+  const [evidenceValue, setEvidenceValue] = useState('')
   const [form] = Form.useForm()
+
+  const detail = issues.find((issue) => issue.key === detailKey) ?? null
+
+  const pendingByIssue = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const entry of selectPendingEntries(issues)) map.set(entry.issue.key, (map.get(entry.issue.key) ?? 0) + 1)
+    return map
+  }, [issues])
 
   const data = useMemo(
     () =>
@@ -65,8 +79,23 @@ export default function IssuesPage() {
     { title: '优先级', dataIndex: 'priority', width: 76, render: (value) => <Tag>{value}</Tag> },
     { title: '团队 / 负责人', dataIndex: 'team', width: 160, render: (_, record) => <div>{record.team}<br /><Typography.Text type="secondary">{record.owner}</Typography.Text></div> },
     { title: '状态', dataIndex: 'status', width: 95, render: (value) => <Tag color={statusColor[value]}>{value}</Tag> },
+    {
+      title: '待确认 / 阻塞',
+      width: 150,
+      render: (_, record) => {
+        const pending = pendingByIssue.get(record.key) ?? 0
+        if (pending === 0 && !record.invalidatedReason) return <span className="muted">—</span>
+        return (
+          <Space size={4} wrap>
+            {pending > 0 && <Tag color="orange">待确认 {pending}</Tag>}
+            {pending > 0 && <Tag color="red">阻塞</Tag>}
+            {record.invalidatedReason && <Tag color="warning">已失效</Tag>}
+          </Space>
+        )
+      },
+    },
     { title: '截止', dataIndex: 'dueDate', width: 105 },
-    { title: '', width: 76, fixed: 'right', render: (_, record) => <Button type="link" onClick={() => setDetail(record)}>详情</Button> },
+    { title: '', width: 76, fixed: 'right', render: (_, record) => <Button type="link" onClick={() => setDetailKey(record.key)}>详情</Button> },
   ]
 
   const applyFilter = () => {
@@ -122,21 +151,38 @@ export default function IssuesPage() {
         </div>
       </div>
 
-      <Drawer title={detail ? `${detail.key} · ${detail.title}` : ''} open={Boolean(detail)} onClose={() => setDetail(null)} width={560}>
+      <Drawer title={detail ? `${detail.key} · ${detail.title}` : ''} open={Boolean(detail)} onClose={() => setDetailKey(null)} width={560}>
         {detail && (
           <Space direction="vertical" size={18} style={{ width: '100%' }}>
-            <Space wrap><Tag color={impactColor[detail.impact]}>{detail.impact}</Tag><Tag>{detail.priority}</Tag><Tag color={statusColor[detail.status]}>{detail.status}</Tag></Space>
+            <Space wrap><Tag color={impactColor[detail.impact]}>{detail.impact}</Tag><Tag>{detail.priority}</Tag><Tag color={statusColor[detail.status]}>{detail.status}</Tag>{(pendingByIssue.get(detail.key) ?? 0) > 0 && <Tag color="orange">待确认 {pendingByIssue.get(detail.key)}</Tag>}{(pendingByIssue.get(detail.key) ?? 0) > 0 && <Tag color="red">阻塞项</Tag>}{detail.invalidatedReason && <Tag color="warning">已失效</Tag>}</Space>
+            {detail.invalidatedReason && <Alert type="warning" showIcon message="原通过结论已失效" description={detail.invalidatedReason} />}
             <dl className="detail-list">
               <dt>站点版本</dt><dd>{detail.site} / {detail.version}</dd>
               <dt>WCAG</dt><dd>{detail.wcag.join('、')}</dd>
               <dt>影响范围</dt><dd>{detail.affected}</dd>
               <dt>复现条件</dt><dd>{detail.reproduction}</dd>
-              <dt>证据链接</dt><dd><Typography.Link href={detail.evidence} target="_blank">{detail.evidence}</Typography.Link></dd>
+              <dt>证据链接</dt><dd><Space><Typography.Link href={detail.evidence} target="_blank">{detail.evidence}</Typography.Link><Button size="small" onClick={() => { setEvidenceValue(detail.evidence); setEvidenceOpen(true) }}>更新证据</Button></Space>{detail.evidenceUpdatedAt && <div><Typography.Text type="secondary" style={{ fontSize: 11 }}>最近更新 {detail.evidenceUpdatedAt}</Typography.Text></div>}</dd>
               <dt>根因</dt><dd>{detail.rootCause}</dd>
               <dt>关联重复</dt><dd>{detail.mergedKeys.length ? detail.mergedKeys.join('、') : '无'}</dd>
               <dt>修复说明</dt><dd>{detail.fixNote ?? '开发尚未提交'}</dd>
               <dt>复测环境</dt><dd>{detail.retestEnv ?? '待开发提交'}</dd>
             </dl>
+            {(pendingByIssue.get(detail.key) ?? 0) > 0 && (
+              <div>
+                <Typography.Title level={5}>待确认复测（离线并入）</Typography.Title>
+                {detail.retestRecords.filter((record) => record.pending).map((record) => (
+                  <div className="timeline-item" key={record.id}>
+                    <Space><Tag color={record.result === '通过' ? 'success' : record.result === '退回' ? 'error' : 'default'}>{record.result}</Tag><Tag color="blue">{record.source ?? '离线页'}</Tag></Space>
+                    <div>{record.note}</div>
+                    <Typography.Text type="secondary" style={{ fontSize: 11 }}>{record.actor} · {record.at}</Typography.Text>
+                    <div style={{ marginTop: 6 }}>
+                      <Button size="small" type="link" onClick={() => decideRetest(detail.key, record.id, true)}>采纳</Button>
+                      <Button size="small" type="link" danger onClick={() => decideRetest(detail.key, record.id, false)}>忽略</Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
             <div>
               <Typography.Title level={5}>操作历史</Typography.Title>
               {detail.history.map((event, index) => <div className="timeline-item" key={index}><Typography.Text strong>{event.action}</Typography.Text><div>{event.detail}</div><Typography.Text type="secondary" style={{ fontSize: 11 }}>{event.actor} · {event.at}</Typography.Text></div>)}
@@ -144,6 +190,16 @@ export default function IssuesPage() {
           </Space>
         )}
       </Drawer>
+
+      <Modal title="更新证据链接" open={evidenceOpen} onCancel={() => setEvidenceOpen(false)} onOk={async () => {
+        if (!detail || !evidenceValue.trim()) return
+        await updateEvidence(detail.key, evidenceValue.trim())
+        message.success('证据已更新；若该问题原已通过，结论立即失效并重算为待复测')
+        setEvidenceOpen(false)
+      }} okText="保存并重算">
+        <Typography.Paragraph type="secondary">更新证据后，原「已通过」结论立即失效，问题重算为待复测，报告草稿将标注失效来源。</Typography.Paragraph>
+        <Input value={evidenceValue} onChange={(event) => setEvidenceValue(event.target.value)} placeholder="新的证据链接" />
+      </Modal>
 
       <Modal title="批量分配整改项" open={assignOpen} onCancel={() => setAssignOpen(false)} onOk={() => form.submit()} okText="确认分配">
         <Form form={form} layout="vertical" onFinish={async (values) => {

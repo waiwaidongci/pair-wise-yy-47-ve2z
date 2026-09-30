@@ -5,6 +5,7 @@ import {
   AppstoreOutlined,
   AuditOutlined,
   BarsOutlined,
+  CloudSyncOutlined,
   DiffOutlined,
   FileDoneOutlined,
   MenuOutlined,
@@ -14,6 +15,7 @@ const items = [
   { key: '/', icon: <AppstoreOutlined />, label: <NavLink to="/">整改总览</NavLink> },
   { key: '/issues', icon: <BarsOutlined />, label: <NavLink to="/issues">问题台账</NavLink> },
   { key: '/retest', icon: <AuditOutlined />, label: <NavLink to="/retest">复测工作台</NavLink> },
+  { key: '/offline', icon: <CloudSyncOutlined />, label: <NavLink to="/offline">离线并入</NavLink> },
   { key: '/versions', icon: <DiffOutlined />, label: <NavLink to="/versions">版本差异</NavLink> },
   { key: '/report', icon: <FileDoneOutlined />, label: <NavLink to="/report">整改报告</NavLink> },
 ]

@@ -1,18 +1,22 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Alert, Button, Descriptions, Form, Input, Radio, Space, Table, Tag, Typography, message } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import axios from 'axios'
 import { useIssues } from '../api/useIssues'
 import { useWorkspaceStore } from '../store/useWorkspaceStore'
-import type { Issue } from '../api/types'
+import type { Issue, RetestRecord } from '../api/types'
+import { selectPendingEntries } from '../api/offlineMerge'
 
 export default function RetestPage() {
   useIssues()
   const issues = useWorkspaceStore((state) => state.issues)
   const updateIssue = useWorkspaceStore((state) => state.updateIssue)
+  const decideRetest = useWorkspaceStore((state) => state.decideRetest)
   const queue = issues.filter((item) => ['待复测', '已退回'].includes(item.status))
   const [active, setActive] = useState<Issue | null>(queue[0] ?? null)
   const [form] = Form.useForm()
+
+  const pendingEntries = useMemo(() => selectPendingEntries(issues), [issues])
 
   const submit = async (values: { result: '已通过' | '已退回' | '不适用'; note: string; environment: string }) => {
     if (!active) return
@@ -22,6 +26,24 @@ export default function RetestPage() {
     form.resetFields()
     message.success(`复测结果已记录：${values.result}`)
   }
+
+  const pendingColumns: ColumnsType<{ issue: Issue; record: RetestRecord }> = [
+    { title: '问题', dataIndex: ['issue', 'key'], width: 120, render: (value: string) => <Typography.Text strong>{value}</Typography.Text> },
+    { title: '来源', dataIndex: ['record', 'source'], width: 110, render: (value?: string) => <Tag color="blue">{value ?? '离线页'}</Tag> },
+    { title: '结论', dataIndex: ['record', 'result'], width: 80, render: (value: string) => <Tag color={value === '通过' ? 'success' : value === '退回' ? 'error' : 'default'}>{value}</Tag> },
+    { title: '复测记录', dataIndex: ['record', 'note'] },
+    { title: '时间', dataIndex: ['record', 'at'], width: 120 },
+    {
+      title: '操作',
+      width: 150,
+      render: (_, entry) => (
+        <Space>
+          <Button size="small" type="link" onClick={() => decideRetest(entry.issue.key, entry.record.id, true)}>采纳</Button>
+          <Button size="small" type="link" danger onClick={() => decideRetest(entry.issue.key, entry.record.id, false)}>忽略</Button>
+        </Space>
+      ),
+    },
+  ]
 
   const columns: ColumnsType<Issue> = [
     { title: '问题', dataIndex: 'key', render: (_, record) => <div><Typography.Text strong>{record.key}</Typography.Text><div>{record.title}</div></div> },
@@ -42,6 +64,17 @@ export default function RetestPage() {
       </div>
 
       <Alert type="info" showIcon style={{ marginBottom: 12 }} message="复测规则" description="键盘问题必须覆盖 Tab、Shift+Tab、Esc 和焦点返回；屏幕阅读器问题需保留截图或播报日志。" />
+
+      {active?.invalidatedReason && (
+        <Alert type="warning" showIcon style={{ marginBottom: 12 }} message="当前问题原通过结论已失效" description={active.invalidatedReason} />
+      )}
+
+      {pendingEntries.length > 0 && (
+        <div className="panel" style={{ marginBottom: 12 }}>
+          <div className="panel-head"><h3>待确认复测（离线并入）</h3><span className="muted">采纳后才重算问题状态；同一问题两页都有新复测时保留两份</span></div>
+          <Table rowKey={(entry) => entry.record.id} columns={pendingColumns} dataSource={pendingEntries} pagination={false} scroll={{ x: 760 }} />
+        </div>
+      )}
 
       <div className="review-grid">
         <div className="panel">
@@ -69,7 +102,7 @@ export default function RetestPage() {
               </Form>
               <Typography.Title level={5} style={{ marginTop: 20 }}>历史复测</Typography.Title>
               {active.retestRecords.length === 0 && <Typography.Text type="secondary">暂无历史记录</Typography.Text>}
-              {active.retestRecords.map((record) => <div className="timeline-item" key={record.id}><Tag color={record.result === '通过' ? 'success' : record.result === '退回' ? 'error' : 'default'}>{record.result}</Tag><Typography.Text strong>{record.actor}</Typography.Text><div>{record.note}</div><Typography.Text type="secondary" style={{ fontSize: 11 }}>{record.at}</Typography.Text></div>)}
+              {active.retestRecords.map((record) => <div className="timeline-item" key={record.id}><Tag color={record.result === '通过' ? 'success' : record.result === '退回' ? 'error' : 'default'}>{record.result}</Tag>{record.pending && <Tag color="orange">待确认</Tag>}{record.invalidated && <Tag color="warning">已失效</Tag>}{record.source && <Tag color="blue">{record.source}</Tag>}<Typography.Text strong>{record.actor}</Typography.Text><div>{record.note}</div><Typography.Text type="secondary" style={{ fontSize: 11 }}>{record.at}</Typography.Text></div>)}
             </>
           )}
         </div>

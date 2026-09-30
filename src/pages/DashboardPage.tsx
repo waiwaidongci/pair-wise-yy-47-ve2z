@@ -3,6 +3,7 @@ import { ArrowRightOutlined, CheckCircleOutlined, ClockCircleOutlined, Exclamati
 import { useNavigate } from 'react-router-dom'
 import { useIssues } from '../api/useIssues'
 import { useWorkspaceStore } from '../store/useWorkspaceStore'
+import { selectBlockingIssues, selectInvalidatedIssues, selectPendingEntries } from '../api/offlineMerge'
 
 export default function DashboardPage() {
   useIssues()
@@ -12,6 +13,9 @@ export default function DashboardPage() {
   const passed = issues.filter((item) => item.status === '已通过').length
   const critical = issues.filter((item) => item.impact === '致命' || item.impact === '严重').length
   const coverage = Math.round((passed / issues.length) * 100)
+  const pendingCount = selectPendingEntries(issues).length
+  const blockingCount = selectBlockingIssues(issues).length
+  const invalidatedCount = selectInvalidatedIssues(issues).length
   const bySite = Array.from(new Set(issues.map((item) => item.site))).map((site) => {
     const items = issues.filter((issue) => issue.site === site)
     return { site, total: items.length, passed: items.filter((item) => item.status === '已通过').length }
@@ -35,6 +39,7 @@ export default function DashboardPage() {
         <div className="metric-card"><span>开放问题</span><strong>{open.length}</strong><small>{issues.length} 条总记录</small></div>
         <div className="metric-card"><span>严重 / 致命</span><strong style={{ color: '#b84f32' }}>{critical}</strong><small>需优先排期</small></div>
         <div className="metric-card"><span>复测通过率</span><strong>{coverage}%</strong><small>当前版本口径</small></div>
+        <div className="metric-card"><span>待确认 / 阻塞</span><strong style={{ color: pendingCount ? '#d48806' : '#173b49' }}>{pendingCount}</strong><small>{blockingCount} 项阻塞 · {invalidatedCount} 项证据失效</small></div>
         <div className="metric-card"><span>覆盖站点</span><strong>{bySite.length}</strong><small>统一 WCAG 2.2 AA</small></div>
       </div>
 
